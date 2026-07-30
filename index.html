@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MC Unit Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0d14;
+    --panel: #0f1520;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --accent3: #7fff6e;
+    --warn: #ffd23f;
+    --muted: #3a4a5e;
+    --text: #c8dff0;
+    --text-dim: #6a8099;
+    --dispatch-color: #00d4ff;
+    --responder-color: #7fff6e;
+    --observer-color: #ff6b35;
+    --area-color: #a78bfa;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-icon {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, var(--accent), #0066aa);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 0 20px rgba(0,212,255,0.3);
+  }
+  .header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,212,255,0.4);
+  }
+  .header p { color: var(--text-dim); font-size: 13px; letter-spacing: 1px; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 48px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: var(--panel);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 28px;
+  }
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,212,255,0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,212,255,0.05);
+  }
+  .upload-zone.drag-over { transform: scale(1.01); }
+  .upload-icon { font-size: 40px; margin-bottom: 12px; }
+  .upload-zone h2 { font-size: 18px; font-weight: 600; letter-spacing: 1px; color: var(--text); margin-bottom: 6px; }
+  .upload-zone p { color: var(--text-dim); font-size: 13px; }
+  .upload-btn {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 10px 24px;
+    background: var(--accent);
+    color: #000;
+    border-radius: 6px;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+  .upload-btn:hover { background: #00b8e6; box-shadow: 0 0 16px rgba(0,212,255,0.4); }
+  #fileInput { display: none; }
+
+  /* Report meta bar */
+  .report-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .meta-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .meta-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .meta-card.blue::after { background: var(--accent); }
+  .meta-card.green::after { background: var(--accent3); }
+  .meta-card.orange::after { background: var(--accent2); }
+  .meta-card.yellow::after { background: var(--warn); }
+  .meta-card.purple::after { background: #a78bfa; }
+  .meta-label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; font-family: 'Share Tech Mono', monospace; }
+  .meta-value { font-size: 22px; font-weight: 700; }
+  .meta-card.blue .meta-value { color: var(--accent); }
+  .meta-card.green .meta-value { color: var(--accent3); }
+  .meta-card.orange .meta-value { color: var(--accent2); }
+  .meta-card.yellow .meta-value { color: var(--warn); }
+  .meta-card.purple .meta-value { color: #a78bfa; }
+  .meta-sub { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+
+  /* Section headers */
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-title::before {
+    content: '';
+    display: block;
+    width: 4px; height: 18px;
+    border-radius: 2px;
+  }
+  .section-title.dispatch { color: var(--dispatch-color); }
+  .section-title.dispatch::before { background: var(--dispatch-color); }
+  .section-title.responder { color: var(--responder-color); }
+  .section-title.responder::before { background: var(--responder-color); }
+  .section-title.observer { color: var(--observer-color); }
+  .section-title.observer::before { background: var(--observer-color); }
+  .section-title.inactive { color: var(--text-dim); }
+  .section-title.inactive::before { background: var(--text-dim); }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin-bottom: 28px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: rgba(255,255,255,0.03);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr {
+    border-bottom: 1px solid rgba(30,45,69,0.6);
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: rgba(0,212,255,0.04); }
+  tbody td {
+    padding: 9px 14px;
+    font-size: 14px;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  .unit-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+  }
+  .unit-badge.dispatch { background: rgba(0,212,255,0.12); color: var(--dispatch-color); border: 1px solid rgba(0,212,255,0.25); }
+  .unit-badge.responder { background: rgba(127,255,110,0.1); color: var(--responder-color); border: 1px solid rgba(127,255,110,0.2); }
+  .unit-badge.observer { background: rgba(255,107,53,0.1); color: var(--observer-color); border: 1px solid rgba(255,107,53,0.2); }
+  .unit-badge.area { background: rgba(167,139,250,0.12); color: var(--area-color); border: 1px solid rgba(167,139,250,0.25); }
+
+  .num { font-family: 'Share Tech Mono', monospace; }
+  .num-zero { color: var(--text-dim); }
+  .num-high { color: var(--warn); font-weight: 600; }
+  .num-urgent { color: var(--accent2); font-weight: 700; }
+
+  /* Last seen badge */
+  .seen-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+  }
+  .seen-recent { background: rgba(127,255,110,0.1); color: var(--accent3); }
+  .seen-moderate { background: rgba(255,210,63,0.1); color: var(--warn); }
+  .seen-old { background: rgba(255,107,53,0.1); color: var(--accent2); }
+  .seen-inactive { background: rgba(100,100,100,0.1); color: var(--text-dim); }
+
+  /* Donut bars */
+  .bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .bar-bg { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
+  /* Panels */
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 28px; }
+
+  /* Role legend */
+  .legend {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 14px 18px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* Duration badge */
+  .duration-highlight {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 6px;
+    background: rgba(255,210,63,0.1);
+    border: 1px solid rgba(255,210,63,0.3);
+    color: var(--warn);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  /* Empty / loading */
+  .empty {
+    text-align: center;
+    padding: 60px;
+    color: var(--text-dim);
+  }
+  .empty-icon { font-size: 36px; margin-bottom: 12px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab {
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab.active-dispatch { background: rgba(0,212,255,0.1); color: var(--dispatch-color); border-color: var(--dispatch-color); }
+  .tab.active-responder { background: rgba(127,255,110,0.1); color: var(--responder-color); border-color: var(--responder-color); }
+  .tab.active-observer { background: rgba(255,107,53,0.1); color: var(--observer-color); border-color: var(--observer-color); }
+  .tab.active-area { background: rgba(167,139,250,0.1); color: var(--area-color); border-color: var(--area-color); }
+  .tab.active-all { background: rgba(167,139,250,0.1); color: #a78bfa; border-color: #a78bfa; }
+  .tab:hover { border-color: var(--accent); color: var(--text); }
+
+  /* Sort */
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--accent); }
+  th.sortable .sort-icon { margin-left: 4px; opacity: 0.4; }
+  th.sortable.asc .sort-icon::after { content: '▲'; }
+  th.sortable.desc .sort-icon::after { content: '▼'; }
+  th.sortable:not(.asc):not(.desc) .sort-icon::after { content: '⇅'; }
+
+  /* Scan line animation */
+  @keyframes scanline {
+    0% { top: 0; }
+    100% { top: 100%; }
+  }
+  .scanning::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: scanline 2s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fadein { animation: fadeIn 0.4s ease forwards; }
+
+  /* Filter inputs */
+  .filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .filter-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); font-family: 'Share Tech Mono', monospace; }
+  .filter-row { display: flex; align-items: center; gap: 6px; }
+  .filter-sep { color: var(--text-dim); font-size: 13px; flex-shrink: 0; }
+  .filter-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+    -moz-appearance: textfield;
+  }
+  .filter-input::-webkit-outer-spin-button,
+  .filter-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .filter-input:focus { border-color: var(--accent); }
+  .filter-input::placeholder { color: var(--muted); }
+  .filter-input.active { border-color: var(--warn); color: var(--warn); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+  #dashboard { display: none; }
+  #uploadSection { }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-icon">📡</div>
+    <div>
+      <h1>MC Unit Analytics</h1>
+      <p>DISPATCH · RESPONDER · OBSERVER INTELLIGENCE SYSTEM</p>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div id="uploadSection">
+    <div class="upload-zone" id="dropZone">
+      <div class="upload-icon">📊</div>
+      <h2>Import Summary Report</h2>
+      <p>Drop your Excel report here or click to browse</p>
+      <p style="margin-top:8px;font-size:12px;font-family:'Share Tech Mono',monospace;color:var(--text-dim);">.xlsx · .xls supported</p>
+      <label class="upload-btn" for="fileInput">SELECT FILE</label>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard">
+
+    <!-- Report meta -->
+    <div class="panel fadein" id="reportHeader" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div>
+          <div class="meta-label" style="margin-bottom:4px;">Report Period</div>
+          <div style="font-size:16px;font-weight:700;" id="reportPeriod">—</div>
+        </div>
+        <div style="color:var(--border);font-size:24px;">|</div>
+        <div>
+          <div class="meta-label" style="margin-bottom:4px;">Duration</div>
+          <span class="duration-highlight" id="reportDuration">—</span>
+        </div>
+        <div style="color:var(--border);font-size:24px;">|</div>
+        <div>
+          <div class="meta-label" style="margin-bottom:4px;">Duration Note</div>
+          <div style="font-size:13px;color:var(--text-dim);" id="durationNote">—</div>
+        </div>
+        <div style="margin-left:auto;">
+          <button class="upload-btn" onclick="resetUpload()" style="padding:8px 16px;font-size:12px;">↑ NEW REPORT</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="report-meta fadein" id="summaryCards"></div>
+
+    <!-- Role legend -->
+    <div class="legend fadein">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--dispatch-color)"></div><strong style="color:var(--dispatch-color)">MCD Units</strong> — Dispatchers (prefix MCD-)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--area-color)"></div><strong style="color:var(--area-color)">MCA Units</strong> — Area Members (prefix MCA-)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--responder-color)"></div><strong style="color:var(--responder-color)">MC Units</strong> — Responders (prefix MC-)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--observer-color)"></div><strong style="color:var(--observer-color)">Observers</strong> — MC-120 through MC-129</div>
+    </div>
+
+    <!-- Tab filter -->
+    <div class="tabs">
+      <button class="tab active-all" onclick="filterTab('all', this)">All Units</button>
+      <button class="tab" onclick="filterTab('dispatch', this)">MCD Dispatchers</button>
+      <button class="tab" onclick="filterTab('area', this)">MCA Area Members</button>
+      <button class="tab" onclick="filterTab('responder', this)">MC Responders</button>
+      <button class="tab" onclick="filterTab('observer', this)">Observers</button>
+    </div>
+
+    <!-- Advanced Filters -->
+    <div class="panel fadein" id="filterPanel" style="margin-bottom:16px;padding:16px 20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);">&#9881; FILTERS</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span id="resultCount" style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-dim);"></span>
+          <button onclick="clearFilters()" style="padding:4px 12px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);font-family:'Rajdhani',sans-serif;font-size:12px;letter-spacing:1px;cursor:pointer;text-transform:uppercase;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">Clear All</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+        <div class="filter-group">
+          <div class="filter-label">Total Calls</div>
+          <div class="filter-row">
+            <input class="filter-input" type="number" id="fTotalMin" placeholder="Min" min="0" oninput="renderTable()">
+            <span class="filter-sep">&#8211;</span>
+            <input class="filter-input" type="number" id="fTotalMax" placeholder="Max" min="0" oninput="renderTable()">
+          </div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">Tire Calls</div>
+          <div class="filter-row">
+            <input class="filter-input" type="number" id="fTireMin" placeholder="Min" min="0" oninput="renderTable()">
+            <span class="filter-sep">&#8211;</span>
+            <input class="filter-input" type="number" id="fTireMax" placeholder="Max" min="0" oninput="renderTable()">
+          </div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">Urgent Calls</div>
+          <div class="filter-row">
+            <input class="filter-input" type="number" id="fUrgentMin" placeholder="Min" min="0" oninput="renderTable()">
+            <span class="filter-sep">&#8211;</span>
+            <input class="filter-input" type="number" id="fUrgentMax" placeholder="Max" min="0" oninput="renderTable()">
+          </div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">Dispatched Events</div>
+          <div class="filter-row">
+            <input class="filter-input" type="number" id="fDispMin" placeholder="Min" min="0" oninput="renderTable()">
+            <span class="filter-sep">&#8211;</span>
+            <input class="filter-input" type="number" id="fDispMax" placeholder="Max" min="0" oninput="renderTable()">
+          </div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">Last Seen (days ago)</div>
+          <div class="filter-row">
+            <input class="filter-input" type="number" id="fSeenMin" placeholder="Min" min="0" oninput="renderTable()">
+            <span class="filter-sep">&#8211;</span>
+            <input class="filter-input" type="number" id="fSeenMax" placeholder="Max" min="0" oninput="renderTable()">
+          </div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">Unit Search</div>
+          <div class="filter-row">
+            <input class="filter-input" type="text" id="fUnitSearch" placeholder="e.g. MC-15" style="width:100%;" oninput="renderTable()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main table -->
+    <div class="panel fadein">
+      <div class="table-wrap">
+        <table id="mainTable">
+          <thead id="tableHead"></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Dispatcher Focus -->
+    <div id="dispatchSection" class="fadein"></div>
+
+  </div><!-- /dashboard -->
+
+</div>
+
+<script>
+let allData = [];
+let currentFilter = 'all';
+let sortKey = 'unit';
+let sortDir = 1;
+
+// ── Classify unit ──────────────────────────────────────────────────────────────
+function classifyUnit(unit) {
+  const u = (unit || '').trim().toUpperCase();
+  if (u.startsWith('MCD-')) return 'dispatch';
+  if (u.startsWith('MCA-')) return 'area';
+  // Observer: MC-120 through MC-129 only
+  if (/^MC-12\d$/.test(u)) return 'observer';
+  if (u.startsWith('MC-')) return 'responder';
+  return 'responder';
+}
+
+function roleLabel(r) {
+  if (r === 'dispatch') return 'Dispatcher';
+  if (r === 'area')     return 'Area Member';
+  if (r === 'observer') return 'Observer';
+  return 'Responder';
+}
+
+// ── Excel serial date → JS Date ────────────────────────────────────────────────
+function excelDateToJS(serial) {
+  if (!serial || isNaN(serial)) return null;
+  // Excel epoch: Jan 0 1900 (but treats 1900 as leap year, offset by 25569 for Unix epoch)
+  const utc_days = Math.floor(serial - 25569);
+  return new Date(utc_days * 86400 * 1000);
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+
+function daysSince(d) {
+  if (!d) return 9999;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+// ── Parse "from X till Y" header ───────────────────────────────────────────────
+function parseReportHeader(raw) {
+  const text = String(raw || '');
+  const m = text.match(/from[:\s]+([^\,]+)[,\s]+till[:\s]+([^\s,]+)/i)
+    || text.match(/(\d{1,2}\/\d{1,2}\/\d{4}).*?(\d{1,2}\/\d{1,2}\/\d{4})/);
+  if (m) {
+    const from = new Date(m[1].trim());
+    const to   = new Date(m[2].trim());
+    if (!isNaN(from) && !isNaN(to)) {
+      const days = Math.round((to - from) / 86400000);
+      return { from, to, days, raw: text };
+    }
+  }
+  return { from: null, to: null, days: null, raw: text };
+}
+
+function describeDuration(days) {
+  if (days === null) return '';
+  if (days <= 7)  return '⚡ Short-term snapshot (≤1 week)';
+  if (days <= 14) return '📅 Bi-weekly window';
+  if (days <= 31) return '📆 ~1 month reporting period';
+  if (days <= 62) return '📊 ~2 month reporting period';
+  if (days <= 93) return '📋 Quarterly report (~3 months)';
+  if (days <= 186) return '📑 Half-year report';
+  return '📂 Long-term report (6+ months)';
+}
+
+// ── File read ─────────────────────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => loadFile(e.target.files[0]));
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); loadFile(e.dataTransfer.files[0]); });
+
+function loadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      processData(raw);
+    } catch(err) {
+      alert('Could not read file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function processData(rows) {
+  // Find header row — first row starting with "Unit" or "unit"
+  let headerIdx = -1;
+  let reportLine = '';
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const first = String(row[0] || '').trim();
+    if (/^unit$/i.test(first)) { headerIdx = i; break; }
+    // grab report period line
+    if (/from/i.test(first)) reportLine = first;
+  }
+
+  if (headerIdx === -1) {
+    // Try to find row where first cell is "Unit" (case insensitive)
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].some(c => /^unit$/i.test(String(c).trim()))) {
+        headerIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (headerIdx === -1) { alert('Could not locate header row with "Unit" column.'); return; }
+
+  const headers = rows[headerIdx].map(h => String(h).trim().toLowerCase().replace(/\s+/g,''));
+  const colIdx = k => headers.indexOf(k);
+
+  const uCol = colIdx('unit');
+  const tcCol = colIdx('totalcalls');
+  const tireCol = colIdx('tirecalls');
+  const bcCol = colIdx('badcoveragecalls');
+  const urgCol = colIdx('urgentcalls');
+  const dispCol = colIdx('dispatched');
+  const lsCol = colIdx('lastseen');
+
+  allData = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const unit = String(row[uCol] || '').trim();
+    if (!unit) continue;
+    const role = classifyUnit(unit);
+    const lastSeenRaw = row[lsCol];
+    const lastSeenDate = excelDateToJS(parseFloat(lastSeenRaw));
+    allData.push({
+      unit,
+      role,
+      totalCalls: parseInt(row[tcCol]) || 0,
+      tireCalls:  parseInt(row[tireCol]) || 0,
+      badCoverage:parseInt(row[bcCol]) || 0,
+      urgentCalls:parseInt(row[urgCol]) || 0,
+      dispatched: parseInt(row[dispCol]) || 0,
+      lastSeenDate,
+      daysSince: daysSince(lastSeenDate),
+    });
+  }
+
+  // Report header
+  const period = parseReportHeader(reportLine);
+  renderDashboard(period);
+}
+
+function renderDashboard(period) {
+  document.getElementById('uploadSection').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+
+  // Period
+  if (period.from && period.to) {
+    document.getElementById('reportPeriod').textContent = `${formatDate(period.from)} → ${formatDate(period.to)}`;
+    document.getElementById('reportDuration').textContent = `${period.days} days`;
+    document.getElementById('durationNote').textContent = describeDuration(period.days);
+  } else {
+    document.getElementById('reportPeriod').textContent = period.raw || 'Period not detected';
+    document.getElementById('reportDuration').textContent = '—';
+    document.getElementById('durationNote').textContent = 'Duration could not be parsed from header';
+  }
+
+  // Summary cards
+  const dispatchers  = allData.filter(d => d.role === 'dispatch');
+  const areaMembers  = allData.filter(d => d.role === 'area');
+  const responders   = allData.filter(d => d.role === 'responder');
+  const observers    = allData.filter(d => d.role === 'observer');
+  const totalCalls   = allData.reduce((a,d) => a + d.totalCalls, 0);
+  const totalDisp    = allData.reduce((a,d) => a + d.dispatched, 0);
+  const urgentTotal  = allData.reduce((a,d) => a + d.urgentCalls, 0);
+
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="meta-card blue"><div class="meta-label">MCD Dispatchers</div><div class="meta-value">${dispatchers.length}</div><div class="meta-sub">${dispatchers.reduce((a,d)=>a+d.dispatched,0)} dispatch events</div></div>
+    <div class="meta-card purple"><div class="meta-label">MCA Area Members</div><div class="meta-value">${areaMembers.length}</div><div class="meta-sub">${areaMembers.reduce((a,d)=>a+d.totalCalls,0)} total calls</div></div>
+    <div class="meta-card green"><div class="meta-label">MC Responders</div><div class="meta-value">${responders.length}</div><div class="meta-sub">${responders.reduce((a,d)=>a+d.totalCalls,0)} total calls</div></div>
+    <div class="meta-card orange"><div class="meta-label">Observers</div><div class="meta-value">${observers.length}</div><div class="meta-sub">MC-12# range units</div></div>
+    <div class="meta-card yellow"><div class="meta-label">Total Calls</div><div class="meta-value">${totalCalls}</div><div class="meta-sub">${urgentTotal} urgent</div></div>
+  `;
+
+  renderTable();
+}
+
+function getFilterVal(id) {
+  const v = document.getElementById(id)?.value.trim();
+  return v === '' || v === null || v === undefined ? null : Number(v);
+}
+function getFilterText(id) {
+  return document.getElementById(id)?.value.trim().toLowerCase() || '';
+}
+
+function renderTable() {
+  let data = currentFilter === 'all' ? allData : allData.filter(d => d.role === currentFilter);
+
+  // Numeric filters
+  const fTotalMin  = getFilterVal('fTotalMin');
+  const fTotalMax  = getFilterVal('fTotalMax');
+  const fTireMin   = getFilterVal('fTireMin');
+  const fTireMax   = getFilterVal('fTireMax');
+  const fUrgentMin = getFilterVal('fUrgentMin');
+  const fUrgentMax = getFilterVal('fUrgentMax');
+  const fDispMin   = getFilterVal('fDispMin');
+  const fDispMax   = getFilterVal('fDispMax');
+  const fSeenMin   = getFilterVal('fSeenMin');
+  const fSeenMax   = getFilterVal('fSeenMax');
+  const fUnit      = getFilterText('fUnitSearch');
+
+  // Highlight active filter inputs
+  ['fTotalMin','fTotalMax','fTireMin','fTireMax','fUrgentMin','fUrgentMax','fDispMin','fDispMax','fSeenMin','fSeenMax'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', el.value.trim() !== '');
+  });
+  const su = document.getElementById('fUnitSearch');
+  if (su) su.classList.toggle('active', su.value.trim() !== '');
+
+  data = data.filter(d => {
+    if (fTotalMin  !== null && d.totalCalls  < fTotalMin)  return false;
+    if (fTotalMax  !== null && d.totalCalls  > fTotalMax)  return false;
+    if (fTireMin   !== null && d.tireCalls   < fTireMin)   return false;
+    if (fTireMax   !== null && d.tireCalls   > fTireMax)   return false;
+    if (fUrgentMin !== null && d.urgentCalls < fUrgentMin) return false;
+    if (fUrgentMax !== null && d.urgentCalls > fUrgentMax) return false;
+    if (fDispMin   !== null && d.dispatched  < fDispMin)   return false;
+    if (fDispMax   !== null && d.dispatched  > fDispMax)   return false;
+    if (fSeenMin   !== null && d.daysSince   < fSeenMin)   return false;
+    if (fSeenMax   !== null && d.daysSince   > fSeenMax)   return false;
+    if (fUnit) {
+      const unitNorm  = d.unit.toLowerCase().replace(/[-\s]/g, '');
+      const queryNorm = fUnit.replace(/[-\s]/g, '');
+      if (!unitNorm.includes(queryNorm) && !d.unit.toLowerCase().includes(fUnit)) return false;
+    }
+    return true;
+  });
+
+  // Result count
+  const countEl = document.getElementById('resultCount');
+  if (countEl) countEl.textContent = `${data.length} of ${allData.length} units`;
+
+  // Sort
+  data = [...data].sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (sortKey === 'unit') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+    if (sortKey === 'lastSeen') { av = a.daysSince; bv = b.daysSince; }
+    if (av < bv) return -sortDir;
+    if (av > bv) return sortDir;
+    return 0;
+  });
+
+  const isDispatchOnly = currentFilter === 'dispatch';
+  const isAllOrMixed   = !isDispatchOnly;
+
+  // Show/hide filters based on active tab
+  const callFilterIds = ['fTotalMin','fTotalMax','fTireMin','fTireMax','fUrgentMin','fUrgentMax'];
+  const dispFilterIds = ['fDispMin','fDispMax'];
+
+  callFilterIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.closest('.filter-group').style.display = isDispatchOnly ? 'none' : '';
+  });
+  dispFilterIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.closest('.filter-group').style.display = (currentFilter === 'responder' || currentFilter === 'observer' || currentFilter === 'area') ? 'none' : '';
+  });
+
+  // Dynamic header
+  const thead = document.getElementById('tableHead');
+  if (isDispatchOnly) {
+    thead.innerHTML = `<tr>
+      <th class="sortable" onclick="sortTable('unit')">Unit <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('dispatched')">Calls Dispatched <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('lastSeen')">Last Seen <span class="sort-icon"></span></th>
+      <th>Activity</th>
+    </tr>`;
+  } else {
+    thead.innerHTML = `<tr>
+      <th class="sortable" onclick="sortTable('unit')">Unit <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('role')">Role <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('totalCalls')">Total Calls <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('tireCalls')">Tire Calls <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('badCoverage')">Bad Coverage <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('urgentCalls')">Urgent <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('dispatched')">Dispatched <span class="sort-icon"></span></th>
+      <th class="sortable" onclick="sortTable('lastSeen')">Last Seen <span class="sort-icon"></span></th>
+      <th>Activity</th>
+    </tr>`;
+  }
+
+  const maxCalls = Math.max(...data.map(d => d.totalCalls), 1);
+  const maxDisp  = Math.max(...data.map(d => d.dispatched), 1);
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = data.map(d => {
+    const roleClass = d.role;
+    const roleText  = roleLabel(d.role);
+    const lsClass = d.daysSince <= 1 ? 'seen-recent' : d.daysSince <= 7 ? 'seen-moderate' : d.daysSince <= 30 ? 'seen-old' : 'seen-inactive';
+    const lsText  = d.lastSeenDate ? formatDate(d.lastSeenDate) + ` (${d.daysSince}d ago)` : '—';
+
+    const actVal  = d.role === 'dispatch' ? d.dispatched : d.totalCalls;
+    const actMax  = d.role === 'dispatch' ? maxDisp : maxCalls;
+    const actPct  = actMax > 0 ? (actVal / actMax * 100).toFixed(1) : 0;
+    const barColor = d.role === 'dispatch' ? 'var(--dispatch-color)' : d.role === 'observer' ? 'var(--observer-color)' : d.role === 'area' ? 'var(--area-color)' : 'var(--responder-color)';
+    const roleColor = d.role === 'dispatch' ? 'var(--dispatch-color)' : d.role === 'area' ? 'var(--area-color)' : d.role === 'observer' ? 'var(--observer-color)' : 'var(--responder-color)';
+
+    const actBar = `<div class="bar-wrap">
+      <div class="bar-bg"><div class="bar-fill" style="width:${actPct}%;background:${barColor};"></div></div>
+      <span style="font-size:11px;color:var(--text-dim);font-family:'Share Tech Mono',monospace;min-width:30px;">${actPct}%</span>
+    </div>`;
+
+    if (isDispatchOnly) {
+      return `<tr>
+        <td><span class="unit-badge ${roleClass}">📻 ${d.unit}</span></td>
+        <td class="num ${d.dispatched===0?'num-zero':d.dispatched>=30?'num-high':''}">${d.dispatched}</td>
+        <td><span class="seen-badge ${lsClass}">${lsText}</span></td>
+        <td>${actBar}</td>
+      </tr>`;
+    } else {
+      return `<tr>
+        <td><span class="unit-badge ${roleClass}">📻 ${d.unit}</span></td>
+        <td><span style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${roleColor};">${roleText}</span></td>
+        <td class="num ${d.totalCalls===0?'num-zero':d.totalCalls>=20?'num-high':''}">${d.totalCalls}</td>
+        <td class="num ${d.tireCalls===0?'num-zero':''}">${d.tireCalls}</td>
+        <td class="num ${d.badCoverage===0?'num-zero':'num-high'}">${d.badCoverage}</td>
+        <td class="num ${d.urgentCalls===0?'num-zero':'num-urgent'}">${d.urgentCalls > 0 ? '🚨 '+d.urgentCalls : '0'}</td>
+        <td class="num ${d.dispatched===0?'num-zero':d.dispatched>=30?'num-high':''}">${d.dispatched}</td>
+        <td><span class="seen-badge ${lsClass}">${lsText}</span></td>
+        <td>${actBar}</td>
+      </tr>`;
+    }
+  }).join('');
+}
+
+function filterTab(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.className = 'tab';
+  });
+  btn.className = `tab active-${filter}`;
+  renderTable();
+}
+
+let sortState = {};
+function sortTable(key) {
+  if (sortKey === key) {
+    sortDir *= -1;
+  } else {
+    sortKey = key;
+    sortDir = 1;
+  }
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('asc', 'desc');
+  });
+  const colMap = { unit:0, role:1, totalCalls:2, tireCalls:3, badCoverage:4, urgentCalls:5, dispatched:6, lastSeen:7 };
+  const ths = document.querySelectorAll('th.sortable');
+  const idx = Object.keys(colMap).indexOf(key);
+  if (ths[idx]) ths[idx].classList.add(sortDir === 1 ? 'asc' : 'desc');
+  renderTable();
+}
+
+function clearFilters() {
+  ['fTotalMin','fTotalMax','fTireMin','fTireMax','fUrgentMin','fUrgentMax','fDispMin','fDispMax','fSeenMin','fSeenMax','fUnitSearch'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; el.classList.remove('active'); }
+  });
+  renderTable();
+}
+
+function resetUpload() {
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('uploadSection').style.display = 'block';
+  document.getElementById('fileInput').value = '';
+  allData = [];
+}
+</script>
+</body>
+</html>
