@@ -400,6 +400,19 @@
   .bd-list { max-height: 460px; overflow-y: auto; }
   .bd-list td { white-space: normal; font-size: 13px; }
   tr.unit-click { cursor: pointer; }
+  .member-name { font-size: 13px; color: var(--text); margin-left: 8px; }
+  .member-name.none { color: var(--muted); font-style: italic; }
+  .roster-btn {
+    margin-left: auto; padding: 8px 16px; background: transparent; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text-dim); font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 1.5px;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .roster-btn:hover { border-color: var(--accent); color: var(--accent); }
+  #rosterPanel textarea {
+    width: 100%; min-height: 260px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+    font-family: 'Share Tech Mono', monospace; font-size: 13px; padding: 10px; outline: none; resize: vertical;
+  }
+  #rosterPanel textarea:focus { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -412,6 +425,22 @@
       <h1>MC Unit Analytics</h1>
       <p>DISPATCH · RESPONDER · OBSERVER INTELLIGENCE SYSTEM</p>
     </div>
+    <button class="roster-btn" onclick="toggleRoster()">👥 Member Names <span id="rosterCount"></span></button>
+  </div>
+
+  <!-- Member roster -->
+  <div id="rosterPanel" class="panel fadein" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+      <div class="section-title area" style="margin-bottom:0;color:var(--area-color);">Member Names</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <label class="upload-btn" for="rosterFile" style="margin-top:0;padding:6px 14px;font-size:11px;background:transparent;color:var(--area-color);border:1px solid var(--area-color);">↑ Import Excel / CSV</label>
+        <input type="file" id="rosterFile" accept=".xlsx,.xls,.csv" style="display:none;">
+        <button class="upload-btn" style="margin-top:0;padding:6px 14px;font-size:11px;" onclick="saveRoster()">Save Names</button>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:10px;">One member per line: <span class="num" style="color:var(--text);">MC-151, Sam Eidelman</span>. Or import a spreadsheet with a Unit column and a Name column. Names are saved in this browser.</p>
+    <textarea id="rosterText" spellcheck="false" placeholder="MC-151, Sam Eidelman&#10;MC-144, ...&#10;MCD-01, ..."></textarea>
+    <div class="upload-status" id="rosterStatus"></div>
   </div>
 
   <!-- Upload -->
@@ -592,7 +621,7 @@
         <div class="filter-group">
           <div class="filter-label">Unit Search</div>
           <div class="filter-row">
-            <input class="filter-input" type="text" id="fUnitSearch" placeholder="e.g. MC-15" style="width:100%;" oninput="renderTable()">
+            <input class="filter-input" type="text" id="fUnitSearch" placeholder="Unit or name" style="width:100%;" oninput="renderTable()">
           </div>
         </div>
       </div>
@@ -742,6 +771,7 @@ function processData(rows) {
   const urgCol = colIdx('urgentcalls');
   const dispCol = colIdx('dispatched');
   const lsCol = colIdx('lastseen');
+  const nameCol = ['name','membername','member','fullname'].map(colIdx).find(i => i >= 0);
 
   allData = [];
   for (let i = headerIdx + 1; i < rows.length; i++) {
@@ -760,9 +790,15 @@ function processData(rows) {
       urgentCalls:parseInt(row[urgCol]) || 0,
       dispatched: parseInt(row[dispCol]) || 0,
       lastSeenDate,
+      _name: nameCol !== undefined ? String(row[nameCol] || '').trim() : '',
       daysSince: daysSince(lastSeenDate),
     });
   }
+
+  // Names from the report fill gaps in the roster (never overwrite names you typed)
+  let added = 0;
+  allData.forEach(d => { const k = d.unit.toUpperCase(); if (d._name && !roster[k]) { roster[k] = d._name; added++; } });
+  if (added) { persistRoster(); fillRosterText(); }
 
   // Report header
   const period = parseReportHeader(reportLine);
@@ -852,7 +888,8 @@ function renderTable() {
     if (fUnit) {
       const unitNorm  = d.unit.toLowerCase().replace(/[-\s]/g, '');
       const queryNorm = fUnit.replace(/[-\s]/g, '');
-      if (!unitNorm.includes(queryNorm) && !d.unit.toLowerCase().includes(fUnit)) return false;
+      const nm = memberName(d.unit).toLowerCase();
+      if (!unitNorm.includes(queryNorm) && !d.unit.toLowerCase().includes(fUnit) && !nm.includes(fUnit)) return false;
     }
     return true;
   });
@@ -933,14 +970,14 @@ function renderTable() {
 
     if (isDispatchOnly) {
       return `<tr class="unit-click" title="Click for call-nature breakdown" onclick="selectBreakdownUnit('${d.unit}')">
-        <td><span class="unit-badge ${roleClass}">📻 ${d.unit}</span></td>
+        <td><span class="unit-badge ${roleClass}">📻 ${d.unit}</span>${nameTag(d.unit)}</td>
         <td class="num ${d.dispatched===0?'num-zero':d.dispatched>=30?'num-high':''}">${d.dispatched}</td>
         <td><span class="seen-badge ${lsClass}">${lsText}</span></td>
         <td>${actBar}</td>
       </tr>`;
     } else {
       return `<tr class="unit-click" title="Click for call-nature breakdown" onclick="selectBreakdownUnit('${d.unit}')">
-        <td><span class="unit-badge ${roleClass}">📻 ${d.unit}</span></td>
+        <td><span class="unit-badge ${roleClass}">📻 ${d.unit}</span>${nameTag(d.unit)}</td>
         <td><span style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${roleColor};">${roleText}</span></td>
         <td class="num ${d.totalCalls===0?'num-zero':d.totalCalls>=20?'num-high':''}">${d.totalCalls}</td>
         <td class="num ${d.tireCalls===0?'num-zero':''}">${d.tireCalls}</td>
@@ -997,6 +1034,111 @@ function resetUpload() {
   summaryLoaded = false;
   updateUploadVisibility();
 }
+
+// ══ MEMBER ROSTER ═════════════════════════════════════════════════════════════
+// Put permanent names here so they show on every computer without importing:
+const DEFAULT_ROSTER = {
+  'MC-151': 'Sam Eidelman',
+};
+let roster = { ...DEFAULT_ROSTER };
+try {
+  const saved = JSON.parse(localStorage.getItem('mcRoster') || 'null');
+  if (saved && typeof saved === 'object') roster = { ...DEFAULT_ROSTER, ...saved };
+} catch (e) {}
+
+function memberName(unit) { return roster[String(unit || '').trim().toUpperCase()] || ''; }
+function unitLabel(unit) { const n = memberName(unit); return unit ? (n ? `${unit} — ${n}` : unit) : ''; }
+function nameTag(unit) {
+  const n = memberName(unit);
+  return n ? `<span class="member-name">${esc(n)}</span>` : '';
+}
+
+function persistRoster() {
+  try { localStorage.setItem('mcRoster', JSON.stringify(roster)); } catch (e) {}
+  document.getElementById('rosterCount').textContent = `(${Object.keys(roster).length})`;
+}
+function fillRosterText() {
+  const units = Object.keys(roster).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  document.getElementById('rosterText').value = units.map(u => `${u}, ${roster[u]}`).join('\n');
+}
+function toggleRoster() {
+  const p = document.getElementById('rosterPanel');
+  const show = p.style.display === 'none';
+  p.style.display = show ? 'block' : 'none';
+  if (show) { fillRosterText(); document.getElementById('rosterStatus').textContent = ''; }
+}
+
+// Accepts "MC-151, Name", "MC-151 - Name", "MC-151<tab>Name", "151 Name"
+function parseRosterLine(line) {
+  const m = String(line).trim().match(/^((?:MC[DA]?)?[\s-]*\d+)\s*[,\t:\-–—]?\s*(.+)$/i);
+  if (!m) return null;
+  let unit = m[1].toUpperCase().replace(/\s+/g, '');
+  if (/^\d+$/.test(unit)) unit = 'MC-' + unit;
+  unit = unit.replace(/^(MC[DA]?)-?(\d+)$/, '$1-$2');
+  const name = m[2].trim();
+  return name ? [unit, name] : null;
+}
+
+function saveRoster() {
+  const next = {};
+  let bad = 0;
+  document.getElementById('rosterText').value.split(/\r?\n/).forEach(line => {
+    if (!line.trim()) return;
+    const r = parseRosterLine(line);
+    if (r) next[r[0]] = r[1]; else bad++;
+  });
+  roster = next;
+  persistRoster();
+  fillRosterText();
+  document.getElementById('rosterStatus').textContent =
+    `✓ Saved ${Object.keys(roster).length} names` + (bad ? ` · ${bad} line(s) skipped (couldn't find a unit number)` : '');
+  refreshAllViews();
+}
+
+document.getElementById('rosterFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+      // Find header row with a unit column; name column = "name", or first+last name columns
+      let h = rows.findIndex(r => r.some(c => /^(unit|unit\s*#|unit\s*number|id)$/i.test(String(c).trim())));
+      let uCol = 0, nCols = [1];
+      if (h >= 0) {
+        const hdr = rows[h].map(c => String(c).trim().toLowerCase());
+        uCol = hdr.findIndex(c => /^(unit|unit\s*#|unit\s*number|id)$/.test(c));
+        const full = hdr.findIndex(c => /^(name|full\s*name|member|member\s*name)$/.test(c));
+        const first = hdr.findIndex(c => /^first(\s*name)?$/.test(c));
+        const last = hdr.findIndex(c => /^last(\s*name)?$/.test(c));
+        nCols = full >= 0 ? [full] : (first >= 0 ? [first, last].filter(i => i >= 0) : [uCol === 0 ? 1 : 0]);
+      }
+      let n = 0;
+      rows.slice(h + 1).forEach(r => {
+        const name = nCols.map(i => String(r[i] || '').trim()).filter(Boolean).join(' ');
+        const parsed = parseRosterLine(`${r[uCol]}, ${name}`);
+        if (parsed && name) { roster[parsed[0]] = parsed[1]; n++; }
+      });
+      persistRoster();
+      fillRosterText();
+      document.getElementById('rosterStatus').textContent = `✓ Imported ${n} names`;
+      refreshAllViews();
+    } catch (err) { alert('Could not read roster file: ' + err.message); }
+    e.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+function refreshAllViews() {
+  if (allData.length) renderTable();
+  if (callsData.length) {
+    const sel = document.getElementById('bdUnit');
+    [...sel.options].forEach(o => o.textContent = unitLabel(o.value));
+    renderBreakdown();
+  }
+}
+persistRoster();
 
 // ══ CALL LIST + RESPONDER BREAKDOWN ═══════════════════════════════════════════
 let summaryLoaded = false;
@@ -1099,7 +1241,7 @@ function processCalls(rows) {
   const sorted = [...units].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const sel = document.getElementById('bdUnit');
   const prev = sel.value;
-  sel.innerHTML = sorted.map(u => `<option value="${u}">${u}</option>`).join('');
+  sel.innerHTML = sorted.map(u => `<option value="${u}">${unitLabel(u)}</option>`).join('');
   if (sorted.includes(prev)) sel.value = prev;
   else if (sorted.includes('MC-151')) sel.value = 'MC-151';
 
@@ -1131,7 +1273,7 @@ function selectBreakdownUnit(unit) {
   const sel = document.getElementById('bdUnit');
   const u = unit.toUpperCase();
   if (![...sel.options].some(o => o.value === u)) {
-    sel.insertAdjacentHTML('beforeend', `<option value="${u}">${u}</option>`);
+    sel.insertAdjacentHTML('beforeend', `<option value="${u}">${unitLabel(u)}</option>`);
   }
   sel.value = u;
   setBdMode(u.startsWith('MCD-') ? 'dispatched' : 'responded');
@@ -1180,7 +1322,7 @@ function renderBreakdown() {
   const top = list[0];
   const verb = bdMode === 'responded' ? 'responded to' : 'dispatched';
   document.getElementById('bdCards').innerHTML = `
-    <div class="meta-card green"><div class="meta-label">Calls ${verb}</div><div class="meta-value">${total}</div><div class="meta-sub">${unit || '—'}</div></div>
+    <div class="meta-card green"><div class="meta-label">Calls ${verb}</div><div class="meta-value">${total}</div><div class="meta-sub">${esc(unitLabel(unit) || '—')}</div></div>
     <div class="meta-card purple"><div class="meta-label">Call natures</div><div class="meta-value">${list.length}</div><div class="meta-sub">distinct types</div></div>
     <div class="meta-card blue"><div class="meta-label">Top nature</div><div class="meta-value" style="font-size:18px;">${top ? esc(natureDisplay[top.key]) : '—'}</div><div class="meta-sub">${top ? `${top.count} calls · ${(top.count / total * 100).toFixed(0)}%` : ''}</div></div>
     <div class="meta-card yellow"><div class="meta-label">Time on calls</div><div class="meta-value">${withMin.length ? (totalMin / 60).toFixed(1) + ' h' : '—'}</div><div class="meta-sub">${withMin.length ? `avg ${(totalMin / withMin.length).toFixed(0)} min/call` : 'no minutes recorded'}</div></div>
@@ -1209,7 +1351,7 @@ function renderBreakdown() {
   document.getElementById('bdListTitle').textContent = bdNatureSel
     ? `${natureDisplay[bdNatureSel]} — ${shown.length} calls (click row again to show all)`
     : `All calls — ${shown.length}`;
-  document.getElementById('bdCallBody').innerHTML = shown.map(d => `<tr title="${esc([d.address, d.vehicle, 'Responders: ' + d.responders.join(', '), 'Dispatched by: ' + d.by].filter(Boolean).join(' · '))}">
+  document.getElementById('bdCallBody').innerHTML = shown.map(d => `<tr title="${esc([d.address, d.vehicle, 'Responders: ' + d.responders.map(unitLabel).join(', '), 'Dispatched by: ' + unitLabel(d.by)].filter(Boolean).join(' · '))}">
     <td class="num">${esc(d.num)}</td>
     <td class="num" style="white-space:nowrap;">${fmtDateTime(d.received)}</td>
     <td>${d.urgent ? '🚨 ' : ''}${esc(natureDisplay[d.natureKey])}</td>
