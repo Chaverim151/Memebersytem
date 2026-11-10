@@ -371,6 +371,35 @@
 
   #dashboard { display: none; }
   #uploadSection { }
+
+  /* Upload grid (two files) */
+  .upload-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .upload-grid .upload-zone { margin-bottom: 0; padding: 36px 24px; }
+  .upload-zone.loaded { border-color: var(--accent3); border-style: solid; }
+  .upload-status { margin-top: 10px; font-family: 'Share Tech Mono', monospace; font-size: 12px; color: var(--accent3); min-height: 16px; }
+
+  /* Breakdown panel */
+  .bd-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
+  .bd-select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text);
+    font-family: 'Share Tech Mono', monospace; font-size: 14px; padding: 7px 10px; outline: none; min-width: 180px;
+  }
+  .bd-select:focus { border-color: var(--accent); }
+  .bd-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .bd-toggle button {
+    background: transparent; border: none; color: var(--text-dim); padding: 7px 14px; cursor: pointer;
+    font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;
+  }
+  .bd-toggle button.on { background: rgba(127,255,110,0.12); color: var(--accent3); }
+  .bd-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); cursor: pointer; }
+  .bd-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; }
+  @media (max-width: 900px) { .bd-grid { grid-template-columns: 1fr; } }
+  .bd-row-click { cursor: pointer; }
+  .bd-row-click.sel { background: rgba(127,255,110,0.08); }
+  .bd-sub { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; font-family: 'Share Tech Mono', monospace; }
+  .bd-list { max-height: 460px; overflow-y: auto; }
+  .bd-list td { white-space: normal; font-size: 13px; }
+  tr.unit-click { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -387,13 +416,80 @@
 
   <!-- Upload -->
   <div id="uploadSection">
-    <div class="upload-zone" id="dropZone">
-      <div class="upload-icon">📊</div>
-      <h2>Import Summary Report</h2>
-      <p>Drop your Excel report here or click to browse</p>
-      <p style="margin-top:8px;font-size:12px;font-family:'Share Tech Mono',monospace;color:var(--text-dim);">.xlsx · .xls supported</p>
-      <label class="upload-btn" for="fileInput">SELECT FILE</label>
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <div class="upload-grid">
+      <div class="upload-zone" id="dropZone">
+        <div class="upload-icon">📊</div>
+        <h2>Import Summary Report</h2>
+        <p>Unit totals report (Unit, Total Calls, Dispatched…)</p>
+        <p style="margin-top:8px;font-size:12px;font-family:'Share Tech Mono',monospace;color:var(--text-dim);">.xlsx · .xls supported</p>
+        <label class="upload-btn" for="fileInput">SELECT FILE</label>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+        <div class="upload-status" id="summaryStatus"></div>
+      </div>
+      <div class="upload-zone" id="callsDropZone">
+        <div class="upload-icon">📋</div>
+        <h2>Import Call List</h2>
+        <p>Full list of calls (Nature, Responders, DispatchedBy…)</p>
+        <p style="margin-top:8px;font-size:12px;font-family:'Share Tech Mono',monospace;color:var(--text-dim);">.xlsx · .xls supported</p>
+        <label class="upload-btn" for="callsFileInput">SELECT FILE</label>
+        <input type="file" id="callsFileInput" accept=".xlsx,.xls" style="display:none;">
+        <div class="upload-status" id="callsStatus"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Responder call-nature breakdown (works with the call list alone) -->
+  <div id="breakdownSection" class="panel fadein" style="display:none;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+      <div class="section-title responder" style="margin-bottom:0;">Call Nature Breakdown</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="callsMeta" style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text-dim);"></span>
+        <label class="upload-btn" for="callsFileInput2" style="margin-top:0;padding:6px 14px;font-size:11px;">↑ NEW CALL LIST</label>
+        <input type="file" id="callsFileInput2" accept=".xlsx,.xls" style="display:none;">
+      </div>
+    </div>
+    <div class="bd-controls">
+      <div class="filter-group">
+        <div class="filter-label">Unit</div>
+        <select class="bd-select" id="bdUnit" onchange="renderBreakdown()"></select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Count calls where unit</div>
+        <div class="bd-toggle" id="bdMode">
+          <button class="on" data-mode="responded" onclick="setBdMode('responded')">Responded</button>
+          <button data-mode="dispatched" onclick="setBdMode('dispatched')">Dispatched</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Date range</div>
+        <div class="filter-row">
+          <input class="filter-input" type="date" id="bdFrom" onchange="renderBreakdown()">
+          <span class="filter-sep">&#8211;</span>
+          <input class="filter-input" type="date" id="bdTo" onchange="renderBreakdown()">
+        </div>
+      </div>
+      <label class="bd-check"><input type="checkbox" id="bdHideTest" checked onchange="renderBreakdown()"> Hide "test" calls</label>
+    </div>
+    <div class="report-meta" id="bdCards" style="margin-bottom:20px;"></div>
+    <div class="bd-grid">
+      <div>
+        <div class="bd-sub">By call nature <span style="text-transform:none;letter-spacing:0;">— click a row to see those calls</span></div>
+        <div class="table-wrap" style="margin-bottom:0;">
+          <table>
+            <thead><tr><th>Nature</th><th>Calls</th><th>Share</th><th>Avg min</th><th>Urgent</th></tr></thead>
+            <tbody id="bdNatureBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="bd-sub" id="bdListTitle">Calls</div>
+        <div class="table-wrap bd-list" style="margin-bottom:0;">
+          <table>
+            <thead><tr><th>#</th><th>Received</th><th>Nature</th><th>City</th><th>Min</th></tr></thead>
+            <tbody id="bdCallBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -674,7 +770,9 @@ function processData(rows) {
 }
 
 function renderDashboard(period) {
-  document.getElementById('uploadSection').style.display = 'none';
+  summaryLoaded = true;
+  updateUploadVisibility();
+  document.getElementById('summaryStatus').textContent = `✓ ${allData.length} units loaded`;
   document.getElementById('dashboard').style.display = 'block';
 
   // Period
@@ -834,14 +932,14 @@ function renderTable() {
     </div>`;
 
     if (isDispatchOnly) {
-      return `<tr>
+      return `<tr class="unit-click" title="Click for call-nature breakdown" onclick="selectBreakdownUnit('${d.unit}')">
         <td><span class="unit-badge ${roleClass}">📻 ${d.unit}</span></td>
         <td class="num ${d.dispatched===0?'num-zero':d.dispatched>=30?'num-high':''}">${d.dispatched}</td>
         <td><span class="seen-badge ${lsClass}">${lsText}</span></td>
         <td>${actBar}</td>
       </tr>`;
     } else {
-      return `<tr>
+      return `<tr class="unit-click" title="Click for call-nature breakdown" onclick="selectBreakdownUnit('${d.unit}')">
         <td><span class="unit-badge ${roleClass}">📻 ${d.unit}</span></td>
         <td><span style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${roleColor};">${roleText}</span></td>
         <td class="num ${d.totalCalls===0?'num-zero':d.totalCalls>=20?'num-high':''}">${d.totalCalls}</td>
@@ -893,9 +991,236 @@ function clearFilters() {
 
 function resetUpload() {
   document.getElementById('dashboard').style.display = 'none';
-  document.getElementById('uploadSection').style.display = 'block';
   document.getElementById('fileInput').value = '';
+  document.getElementById('summaryStatus').textContent = '';
   allData = [];
+  summaryLoaded = false;
+  updateUploadVisibility();
+}
+
+// ══ CALL LIST + RESPONDER BREAKDOWN ═══════════════════════════════════════════
+let summaryLoaded = false;
+let callsData = [];
+let bdMode = 'responded';
+let bdNatureSel = null;
+
+function updateUploadVisibility() {
+  const callsLoaded = callsData.length > 0;
+  document.getElementById('dropZone').style.display = summaryLoaded ? 'none' : '';
+  document.getElementById('callsDropZone').style.display = callsLoaded ? 'none' : '';
+  document.getElementById('uploadSection').style.display = (summaryLoaded && callsLoaded) ? 'none' : '';
+}
+
+const callsDrop = document.getElementById('callsDropZone');
+callsDrop.addEventListener('dragover', e => { e.preventDefault(); callsDrop.classList.add('drag-over'); });
+callsDrop.addEventListener('dragleave', () => callsDrop.classList.remove('drag-over'));
+callsDrop.addEventListener('drop', e => { e.preventDefault(); callsDrop.classList.remove('drag-over'); loadCallsFile(e.dataTransfer.files[0]); });
+document.getElementById('callsFileInput').addEventListener('change', e => loadCallsFile(e.target.files[0]));
+document.getElementById('callsFileInput2').addEventListener('change', e => loadCallsFile(e.target.files[0]));
+
+function loadCallsFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      // Use the first sheet that actually has a Nature column
+      let rows = null;
+      for (const name of wb.SheetNames) {
+        const r = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
+        if (r.some(row => row.some(c => /^nature$/i.test(String(c).trim())))) { rows = r; break; }
+      }
+      if (!rows) { alert('Could not find a "Nature" column in this file. Is this the call list?'); return; }
+      processCalls(rows);
+    } catch (err) {
+      alert('Could not read call list: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function toDate(v) {
+  if (v instanceof Date) return isNaN(v) ? null : v;
+  if (typeof v === 'number') return new Date(Math.round((v - 25569) * 86400000));
+  if (typeof v === 'string' && v.trim()) { const d = new Date(v); return isNaN(d) ? null : d; }
+  return null;
+}
+
+// Group spelling/spacing/case variants of the same nature together ("Boost " = "Boost", "AC request" = "AC Request")
+const natureDisplay = {};
+function natureKey(raw) {
+  const clean = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return 'unspecified';
+  const k = clean.toLowerCase();
+  if (!natureDisplay[k]) natureDisplay[k] = clean;
+  return k;
+}
+
+function splitUnits(s) {
+  return String(s || '').split(/[,;/]+/).map(u => u.trim().toUpperCase()).filter(Boolean);
+}
+
+function processCalls(rows) {
+  const hIdx = rows.findIndex(r => r.some(c => /^nature$/i.test(String(c).trim())));
+  const headers = rows[hIdx].map(h => String(h).trim().toLowerCase().replace(/\s+/g, ''));
+  const c = k => headers.indexOf(k);
+  const col = {
+    num: c('callnumber'), by: c('dispatchedby'), rec: c('callreceived'), cov: c('callcovered'),
+    addr: c('address'), city: c('citystate'), nature: c('nature'), veh: c('vehicle'),
+    resp: c('responders'), min: c('minutescovered'), urg: c('urgent'),
+  };
+  for (const k in natureDisplay) delete natureDisplay[k];
+  natureDisplay['unspecified'] = '(No nature)';
+
+  callsData = [];
+  for (let i = hIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || r.every(v => v === '' || v === null)) continue;
+    const urgRaw = col.urg >= 0 ? r[col.urg] : false;
+    const minRaw = col.min >= 0 ? r[col.min] : '';
+    callsData.push({
+      num: col.num >= 0 ? r[col.num] : '',
+      by: col.by >= 0 ? String(r[col.by] || '').trim().toUpperCase() : '',
+      received: col.rec >= 0 ? toDate(r[col.rec]) : null,
+      covered: col.cov >= 0 ? toDate(r[col.cov]) : null,
+      address: col.addr >= 0 ? String(r[col.addr] || '') : '',
+      city: col.city >= 0 ? String(r[col.city] || '').split(',')[0].trim() : '',
+      natureKey: natureKey(r[col.nature]),
+      vehicle: col.veh >= 0 ? String(r[col.veh] || '').trim() : '',
+      responders: col.resp >= 0 ? splitUnits(r[col.resp]) : [],
+      minutes: minRaw === '' || minRaw === null || isNaN(parseFloat(minRaw)) ? null : parseFloat(minRaw),
+      urgent: urgRaw === true || /^(true|yes|1)$/i.test(String(urgRaw).trim()),
+    });
+  }
+
+  // Unit dropdown — every unit that responded to or dispatched a call
+  const units = new Set();
+  callsData.forEach(d => { d.responders.forEach(u => units.add(u)); if (d.by) units.add(d.by); });
+  const sorted = [...units].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const sel = document.getElementById('bdUnit');
+  const prev = sel.value;
+  sel.innerHTML = sorted.map(u => `<option value="${u}">${u}</option>`).join('');
+  if (sorted.includes(prev)) sel.value = prev;
+  else if (sorted.includes('MC-151')) sel.value = 'MC-151';
+
+  // Date range limits
+  const dates = callsData.map(d => d.received).filter(Boolean).sort((a, b) => a - b);
+  const meta = document.getElementById('callsMeta');
+  if (dates.length) {
+    meta.textContent = `${callsData.length} calls · ${formatDate(dates[0])} → ${formatDate(dates[dates.length - 1])}`;
+  } else meta.textContent = `${callsData.length} calls`;
+  document.getElementById('bdFrom').value = '';
+  document.getElementById('bdTo').value = '';
+
+  document.getElementById('callsStatus').textContent = `✓ ${callsData.length} calls loaded`;
+  document.getElementById('breakdownSection').style.display = 'block';
+  updateUploadVisibility();
+  bdNatureSel = null;
+  renderBreakdown();
+}
+
+function setBdMode(mode) {
+  bdMode = mode;
+  document.querySelectorAll('#bdMode button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+  bdNatureSel = null;
+  renderBreakdown();
+}
+
+function selectBreakdownUnit(unit) {
+  if (!callsData.length) return;
+  const sel = document.getElementById('bdUnit');
+  const u = unit.toUpperCase();
+  if (![...sel.options].some(o => o.value === u)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${u}">${u}</option>`);
+  }
+  sel.value = u;
+  setBdMode(u.startsWith('MCD-') ? 'dispatched' : 'responded');
+  document.getElementById('breakdownSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fmtDateTime(d) {
+  if (!d) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+         d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
+
+function renderBreakdown() {
+  const unit = document.getElementById('bdUnit').value;
+  const hideTest = document.getElementById('bdHideTest').checked;
+  const fromV = document.getElementById('bdFrom').value;
+  const toV = document.getElementById('bdTo').value;
+  const from = fromV ? new Date(fromV + 'T00:00:00') : null;
+  const to = toV ? new Date(toV + 'T23:59:59') : null;
+
+  const calls = callsData.filter(d => {
+    if (bdMode === 'responded' ? !d.responders.includes(unit) : d.by !== unit) return false;
+    if (hideTest && d.natureKey === 'test') return false;
+    if (from && (!d.received || d.received < from)) return false;
+    if (to && (!d.received || d.received > to)) return false;
+    return true;
+  });
+
+  // Group by nature
+  const groups = {};
+  calls.forEach(d => {
+    const g = groups[d.natureKey] || (groups[d.natureKey] = { key: d.natureKey, count: 0, minSum: 0, minN: 0, urgent: 0 });
+    g.count++;
+    if (d.minutes !== null) { g.minSum += d.minutes; g.minN++; }
+    if (d.urgent) g.urgent++;
+  });
+  const list = Object.values(groups).sort((a, b) => b.count - a.count || natureDisplay[a.key].localeCompare(natureDisplay[b.key]));
+  if (bdNatureSel && !groups[bdNatureSel]) bdNatureSel = null;
+
+  // Cards
+  const total = calls.length;
+  const withMin = calls.filter(d => d.minutes !== null);
+  const totalMin = withMin.reduce((a, d) => a + d.minutes, 0);
+  const urgent = calls.filter(d => d.urgent).length;
+  const top = list[0];
+  const verb = bdMode === 'responded' ? 'responded to' : 'dispatched';
+  document.getElementById('bdCards').innerHTML = `
+    <div class="meta-card green"><div class="meta-label">Calls ${verb}</div><div class="meta-value">${total}</div><div class="meta-sub">${unit || '—'}</div></div>
+    <div class="meta-card purple"><div class="meta-label">Call natures</div><div class="meta-value">${list.length}</div><div class="meta-sub">distinct types</div></div>
+    <div class="meta-card blue"><div class="meta-label">Top nature</div><div class="meta-value" style="font-size:18px;">${top ? esc(natureDisplay[top.key]) : '—'}</div><div class="meta-sub">${top ? `${top.count} calls · ${(top.count / total * 100).toFixed(0)}%` : ''}</div></div>
+    <div class="meta-card yellow"><div class="meta-label">Time on calls</div><div class="meta-value">${withMin.length ? (totalMin / 60).toFixed(1) + ' h' : '—'}</div><div class="meta-sub">${withMin.length ? `avg ${(totalMin / withMin.length).toFixed(0)} min/call` : 'no minutes recorded'}</div></div>
+    <div class="meta-card orange"><div class="meta-label">Urgent</div><div class="meta-value">${urgent}</div><div class="meta-sub">${total ? (urgent / total * 100).toFixed(0) + '% of calls' : ''}</div></div>
+  `;
+
+  // Nature table
+  const max = Math.max(...list.map(g => g.count), 1);
+  document.getElementById('bdNatureBody').innerHTML = list.length ? list.map(g => {
+    const pct = (g.count / total * 100);
+    return `<tr class="bd-row-click ${bdNatureSel === g.key ? 'sel' : ''}" onclick="toggleNature('${g.key.replace(/'/g, "\\'")}')">
+      <td>${esc(natureDisplay[g.key])}</td>
+      <td class="num">${g.count}</td>
+      <td style="min-width:140px;"><div class="bar-wrap">
+        <div class="bar-bg"><div class="bar-fill" style="width:${(g.count / max * 100).toFixed(1)}%;background:var(--responder-color);"></div></div>
+        <span style="font-size:11px;color:var(--text-dim);font-family:'Share Tech Mono',monospace;min-width:38px;">${pct.toFixed(1)}%</span>
+      </div></td>
+      <td class="num ${g.minN ? '' : 'num-zero'}">${g.minN ? (g.minSum / g.minN).toFixed(0) : '—'}</td>
+      <td class="num ${g.urgent ? 'num-urgent' : 'num-zero'}">${g.urgent ? '🚨 ' + g.urgent : '0'}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" class="empty" style="padding:30px;">No calls for ${esc(unit)} with these filters</td></tr>`;
+
+  // Call list
+  const shown = (bdNatureSel ? calls.filter(d => d.natureKey === bdNatureSel) : calls)
+    .slice().sort((a, b) => (b.received || 0) - (a.received || 0));
+  document.getElementById('bdListTitle').textContent = bdNatureSel
+    ? `${natureDisplay[bdNatureSel]} — ${shown.length} calls (click row again to show all)`
+    : `All calls — ${shown.length}`;
+  document.getElementById('bdCallBody').innerHTML = shown.map(d => `<tr title="${esc([d.address, d.vehicle, 'Responders: ' + d.responders.join(', '), 'Dispatched by: ' + d.by].filter(Boolean).join(' · '))}">
+    <td class="num">${esc(d.num)}</td>
+    <td class="num" style="white-space:nowrap;">${fmtDateTime(d.received)}</td>
+    <td>${d.urgent ? '🚨 ' : ''}${esc(natureDisplay[d.natureKey])}</td>
+    <td>${esc(d.city || '—')}</td>
+    <td class="num ${d.minutes === null ? 'num-zero' : ''}">${d.minutes === null ? '—' : d.minutes}</td>
+  </tr>`).join('');
+}
+
+function toggleNature(key) {
+  bdNatureSel = bdNatureSel === key ? null : key;
+  renderBreakdown();
 }
 </script>
 </body>
